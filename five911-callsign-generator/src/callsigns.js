@@ -49,13 +49,14 @@ function formatCallsign(prefix, number, digits) {
   return `${prefix}${String(number).padStart(digits, '0')}`;
 }
 
+function validateDepartmentUnit(department, unitType) {
+  if (!CONFIG[department]) throw new Error('Unknown department.');
+  if (!CONFIG[department].unitTypes[unitType]) throw new Error('Unknown unit type for that department.');
+}
+
 async function generateUniqueCallsign(department, unitType) {
-  const dept = CONFIG[department];
-  if (!dept) throw new Error('Unknown department.');
-
-  const unit = dept.unitTypes[unitType];
-  if (!unit) throw new Error('Unknown unit type for that department.');
-
+  validateDepartmentUnit(department, unitType);
+  const unit = CONFIG[department].unitTypes[unitType];
   const max = Math.pow(10, unit.digits) - 1;
   const min = 1;
 
@@ -65,9 +66,7 @@ async function generateUniqueCallsign(department, unitType) {
   );
   const used = new Set(existing.rows.map((r) => r.callsign));
 
-  if (used.size >= max) {
-    throw new Error('No callsigns available for that department/unit type.');
-  }
+  if (used.size >= max) throw new Error('No callsigns available for that department/unit type.');
 
   for (let attempt = 0; attempt < 5000; attempt++) {
     const num = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -84,15 +83,15 @@ async function generateUniqueCallsign(department, unitType) {
 }
 
 async function allocateCallsign({ discordUserId, discordUsername, department, unitType }) {
+  validateDepartmentUnit(department, unitType);
+
   const existing = await pool.query(
     `SELECT * FROM callsign_allocations
      WHERE discord_user_id = $1 AND department = $2 AND unit_type = $3`,
     [discordUserId, department, unitType]
   );
 
-  if (existing.rows[0]) {
-    return { allocation: existing.rows[0], created: false };
-  }
+  if (existing.rows[0]) return { allocation: existing.rows[0], created: false };
 
   for (let i = 0; i < 5; i++) {
     const callsign = await generateUniqueCallsign(department, unitType);
@@ -128,6 +127,40 @@ async function listAllCallsigns() {
   return result.rows;
 }
 
+async function addAllocation({ discordUserId, discordUsername, department, unitType, callsign }) {
+  validateDepartmentUnit(department, unitType);
+  const cleanCallsign = String(callsign || '').trim().toUpperCase();
+  if (!discordUserId || !cleanCallsign) throw new Error('Discord User ID and callsign are required.');
+
+  const result = await pool.query(
+    `INSERT INTO callsign_allocations
+      (discord_user_id, discord_username, department, unit_type, callsign)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [String(discordUserId).trim(), String(discordUsername || '').trim(), department, unitType, cleanCallsign]
+  );
+  return result.rows[0];
+}
+
+async function updateAllocation(id, { discordUserId, discordUsername, department, unitType, callsign }) {
+  validateDepartmentUnit(department, unitType);
+  const cleanCallsign = String(callsign || '').trim().toUpperCase();
+  if (!id || !discordUserId || !cleanCallsign) throw new Error('ID, Discord User ID and callsign are required.');
+
+  const result = await pool.query(
+    `UPDATE callsign_allocations
+     SET discord_user_id = $1,
+         discord_username = $2,
+         department = $3,
+         unit_type = $4,
+         callsign = $5
+     WHERE id = $6
+     RETURNING *`,
+    [String(discordUserId).trim(), String(discordUsername || '').trim(), department, unitType, cleanCallsign, id]
+  );
+  return result.rows[0];
+}
+
 async function deleteAllocation(id) {
   const result = await pool.query('DELETE FROM callsign_allocations WHERE id = $1 RETURNING *', [id]);
   return result.rows[0];
@@ -148,6 +181,8 @@ module.exports = {
   allocateCallsign,
   getUserCallsigns,
   listAllCallsigns,
+  addAllocation,
+  updateAllocation,
   deleteAllocation,
   friendlyDepartment,
   friendlyUnit,
