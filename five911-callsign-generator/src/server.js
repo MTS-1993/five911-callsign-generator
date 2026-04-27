@@ -26,7 +26,7 @@ app.use(morgan('combined'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use('/public', express.static(path.join(__dirname, '..', 'public')));
-
+app.set('trust proxy', 1);
 app.use(session({
   name: 'five911_callsign_admin',
   secret: process.env.SESSION_SECRET || 'change-this-session-secret',
@@ -35,7 +35,7 @@ app.use(session({
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: 'auto',
     maxAge: 1000 * 60 * 60 * 8,
   },
 }));
