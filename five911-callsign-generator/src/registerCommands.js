@@ -1,41 +1,54 @@
 require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const { getDepartmentChoices } = require('./callsigns');
-
-const departments = getDepartmentChoices();
 
 const callsign = new SlashCommandBuilder()
   .setName('callsign')
   .setDescription('Five911 callsign tools')
   .addSubcommand((sub) =>
     sub
-      .setName('generate')
-      .setDescription('Generate or retrieve your assigned Five911 callsign')
+      .setName('cpd')
+      .setDescription('Generate or retrieve your Chicago Police Department callsign')
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('isp')
+      .setDescription('Generate or retrieve your Illinois State Trooper callsign')
       .addStringOption((opt) =>
-        opt.setName('department')
-          .setDescription('Department')
-          .setRequired(true)
-          .addChoices(...departments)
-      )
-      .addStringOption((opt) =>
-        opt.setName('unit_type')
-          .setDescription('Unit type. Must match the selected department.')
+        opt
+          .setName('district')
+          .setDescription('Illinois State Police district')
           .setRequired(true)
           .addChoices(
-            { name: 'CPD - Beat / Unit Number', value: 'patrol' },
-            { name: 'ISP - District 17', value: 'district17' },
-            { name: 'ISP - District 20', value: 'district20' },
-            { name: 'Sheriff - Standard Patrol', value: 'patrol' },
-            { name: 'Sheriff - Detectives', value: 'detectives' },
-            { name: 'Sheriff - Tactical Units', value: 'tactical' },
-            { name: 'Sheriff - K9 Units', value: 'k9' },
-            { name: 'Sheriff - AIR', value: 'air' },
-            { name: 'Sheriff - Sergeants', value: 'sergeant' },
-            { name: 'Sheriff - Lieutenant', value: 'lieutenant' },
-            { name: 'Sheriff - Higher Command', value: 'command' },
-            { name: 'Illinois Game Wardens', value: 'warden' }
+            { name: 'District 17', value: 'district17' },
+            { name: 'District 20', value: 'district20' }
           )
       )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('sheriff')
+      .setDescription('Generate or retrieve your Chicago Sheriffs Department callsign')
+      .addStringOption((opt) =>
+        opt
+          .setName('unit')
+          .setDescription('Sheriff unit type')
+          .setRequired(true)
+          .addChoices(
+            { name: 'Standard Patrol', value: 'patrol' },
+            { name: 'Detectives', value: 'detectives' },
+            { name: 'Tactical Units', value: 'tactical' },
+            { name: 'K9 Units', value: 'k9' },
+            { name: 'AIR', value: 'air' },
+            { name: 'Sergeants', value: 'sergeant' },
+            { name: 'Lieutenant', value: 'lieutenant' },
+            { name: 'Higher Command', value: 'command' }
+          )
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName('gamewarden')
+      .setDescription('Generate or retrieve your Illinois Game Wardens callsign')
   )
   .addSubcommand((sub) => sub.setName('mine').setDescription('View your allocated Five911 callsigns'));
 

@@ -1,10 +1,9 @@
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, PermissionFlagsBits, Events } = require('discord.js');
 const {
   allocateCallsign,
   getUserCallsigns,
   friendlyDepartment,
   friendlyUnit,
-  getUnitChoices,
   deleteAllocation,
 } = require('./callsigns');
 
@@ -15,52 +14,41 @@ function hasAdminAccess(interaction) {
   return interaction.member?.roles?.cache?.has(roleId);
 }
 
+function getAllocationFromSubcommand(interaction) {
+  const sub = interaction.options.getSubcommand();
+
+  if (sub === 'cpd') {
+    return { department: 'CPD', unitType: 'patrol' };
+  }
+
+  if (sub === 'isp') {
+    return { department: 'ISP', unitType: interaction.options.getString('district', true) };
+  }
+
+  if (sub === 'sheriff') {
+    return { department: 'CSD', unitType: interaction.options.getString('unit', true) };
+  }
+
+  if (sub === 'gamewarden') {
+    return { department: 'IGW', unitType: 'warden' };
+  }
+
+  return null;
+}
+
 function createBot() {
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-  client.once('ready', () => {
+  client.once(Events.ClientReady, () => {
     console.log(`Discord bot logged in as ${client.user.tag}`);
   });
 
-  client.on('interactionCreate', async (interaction) => {
+  client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
 
     try {
       if (interaction.commandName === 'callsign') {
         const sub = interaction.options.getSubcommand();
-
-        if (sub === 'generate') {
-          const department = interaction.options.getString('department', true);
-          const unitType = interaction.options.getString('unit_type', true);
-          const allowedUnitTypes = getUnitChoices(department).map((u) => u.value);
-
-          if (!allowedUnitTypes.includes(unitType)) {
-            return interaction.reply({
-              content: 'That unit type does not belong to the selected department. Please try again.',
-              ephemeral: true,
-            });
-          }
-
-          const { allocation, created } = await allocateCallsign({
-            discordUserId: interaction.user.id,
-            discordUsername: interaction.user.tag,
-            department,
-            unitType,
-          });
-
-          const embed = new EmbedBuilder()
-            .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
-            .setColor(0x1f6feb)
-            .addFields(
-              { name: 'Department', value: friendlyDepartment(allocation.department), inline: false },
-              { name: 'Unit Type', value: friendlyUnit(allocation.department, allocation.unit_type), inline: true },
-              { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
-            )
-            .setFooter({ text: 'Five911 Callsign System' })
-            .setTimestamp();
-
-          return interaction.reply({ embeds: [embed], ephemeral: true });
-        }
 
         if (sub === 'mine') {
           const rows = await getUserCallsigns(interaction.user.id);
@@ -74,6 +62,31 @@ function createBot() {
 
           return interaction.reply({ content: text, ephemeral: true });
         }
+
+        const chosen = getAllocationFromSubcommand(interaction);
+        if (!chosen) {
+          return interaction.reply({ content: 'Unknown callsign option.', ephemeral: true });
+        }
+
+        const { allocation, created } = await allocateCallsign({
+          discordUserId: interaction.user.id,
+          discordUsername: interaction.user.tag,
+          department: chosen.department,
+          unitType: chosen.unitType,
+        });
+
+        const embed = new EmbedBuilder()
+          .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
+          .setColor(0x1f6feb)
+          .addFields(
+            { name: 'Department', value: friendlyDepartment(allocation.department), inline: false },
+            { name: 'Unit Type', value: friendlyUnit(allocation.department, allocation.unit_type), inline: true },
+            { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
+          )
+          .setFooter({ text: 'Five911 Callsign System' })
+          .setTimestamp();
+
+        return interaction.reply({ embeds: [embed], ephemeral: true });
       }
 
       if (interaction.commandName === 'callsign-admin') {
@@ -91,7 +104,8 @@ function createBot() {
       }
     } catch (err) {
       console.error(err);
-      const message = 'Something went wrong while handling that callsign request.';
+      const safeDetail = process.env.SHOW_DISCORD_ERRORS === 'true' ? `\n\`${err.message}\`` : '';
+      const message = `Something went wrong while handling that callsign request.${safeDetail}`;
       if (interaction.deferred || interaction.replied) return interaction.followUp({ content: message, ephemeral: true });
       return interaction.reply({ content: message, ephemeral: true });
     }
