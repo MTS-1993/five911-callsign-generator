@@ -1,0 +1,23 @@
+:root { color-scheme: dark; --bg:#0b1220; --panel:#111b2e; --card:#17223a; --text:#f4f7fb; --muted:#9fb0c8; --accent:#2f81f7; --line:#263653; }
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, system-ui, Segoe UI, Arial, sans-serif; background: radial-gradient(circle at top, #14213d, var(--bg)); color: var(--text); }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 32px 18px; }
+.hero { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:28px; background:rgba(17,27,46,.78); border:1px solid var(--line); border-radius:24px; box-shadow: 0 24px 80px rgba(0,0,0,.28); }
+.eyebrow { color: var(--accent); text-transform:uppercase; letter-spacing:.18em; font-weight:800; margin:0 0 8px; }
+h1 { font-size: clamp(32px, 5vw, 58px); margin:0; }
+h2 { margin:0; }
+.muted { color: var(--muted); margin:10px 0 0; }
+.button { color:white; background:var(--accent); padding:12px 18px; border-radius:14px; text-decoration:none; font-weight:800; }
+.cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:14px; margin:20px 0; }
+.card { padding:20px; background:var(--card); border:1px solid var(--line); border-radius:20px; }
+.card span { display:block; color:var(--muted); margin-bottom:10px; }
+.card strong { font-size:34px; }
+.panel { background:rgba(17,27,46,.88); border:1px solid var(--line); border-radius:24px; overflow:hidden; }
+.panel-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px; border-bottom:1px solid var(--line); }
+input { width:min(420px, 100%); padding:12px 14px; background:#0c1424; color:var(--text); border:1px solid var(--line); border-radius:14px; outline:none; }
+.table-wrap { overflow:auto; }
+table { width:100%; border-collapse:collapse; min-width:850px; }
+th, td { text-align:left; padding:14px 16px; border-bottom:1px solid var(--line); }
+th { color:var(--muted); font-size:13px; text-transform:uppercase; letter-spacing:.08em; }
+tr:hover td { background:rgba(47,129,247,.08); }
+@media (max-width: 680px) { .hero, .panel-head { flex-direction:column; align-items:flex-start; } }
