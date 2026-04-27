@@ -68,3 +68,17 @@ From the dashboard you can:
 /callsign mine
 /callsign-admin release
 ```
+
+## Role-based department restrictions
+
+Departments can now be restricted by Discord role ID.
+
+In the admin dashboard, edit a department and fill **Required Discord Role IDs** with one role ID per line or comma-separated. Leave it blank to allow everyone.
+
+Players without one of the required roles will be blocked from generating a callsign for that department. Server Administrators bypass this restriction.
+
+After uploading this version, deploy with:
+
+```bash
+npm install && npm run migrate && npm run register-commands
+```

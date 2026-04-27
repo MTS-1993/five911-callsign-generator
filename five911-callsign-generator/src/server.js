@@ -128,14 +128,14 @@ app.post('/admin/callsigns/:id/delete', requireAdmin, async (req, res) => {
 
 app.post('/admin/departments', requireAdmin, async (req, res) => {
   try {
-    await addDepartment({ code: req.body.code, label: req.body.label, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order });
+    await addDepartment({ code: req.body.code, label: req.body.label, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order, requiredRoleIds: req.body.required_role_ids });
     res.redirect('/?success=Department added.');
   } catch (err) { console.error(err); res.redirect(`/?error=${encodeURIComponent(err.message)}`); }
 });
 
 app.post('/admin/departments/:code/edit', requireAdmin, async (req, res) => {
   try {
-    const updated = await updateDepartment(req.params.code, { label: req.body.label, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order });
+    const updated = await updateDepartment(req.params.code, { label: req.body.label, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order, requiredRoleIds: req.body.required_role_ids });
     if (!updated) throw new Error('Department not found.');
     res.redirect('/?success=Department updated.');
   } catch (err) { console.error(err); res.redirect(`/?error=${encodeURIComponent(err.message)}`); }
