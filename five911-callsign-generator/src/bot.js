@@ -5,6 +5,8 @@ const {
   friendlyDepartment,
   friendlyUnit,
   deleteAllocation,
+  getDepartmentChoices,
+  getUnitChoices,
 } = require('./callsigns');
 
 function hasAdminAccess(interaction) {
@@ -14,26 +16,11 @@ function hasAdminAccess(interaction) {
   return interaction.member?.roles?.cache?.has(roleId);
 }
 
-function getAllocationFromSubcommand(interaction) {
-  const sub = interaction.options.getSubcommand();
-
-  if (sub === 'cpd') {
-    return { department: 'CPD', unitType: 'patrol' };
-  }
-
-  if (sub === 'isp') {
-    return { department: 'ISP', unitType: interaction.options.getString('district', true) };
-  }
-
-  if (sub === 'sheriff') {
-    return { department: 'CSD', unitType: interaction.options.getString('unit', true) };
-  }
-
-  if (sub === 'gamewarden') {
-    return { department: 'IGW', unitType: 'warden' };
-  }
-
-  return null;
+function filterChoices(choices, focused) {
+  const q = String(focused || '').toLowerCase();
+  return choices
+    .filter((choice) => choice.name.toLowerCase().includes(q) || choice.value.toLowerCase().includes(q))
+    .slice(0, 25);
 }
 
 function createBot() {
@@ -44,56 +31,61 @@ function createBot() {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-
     try {
+      if (interaction.isAutocomplete() && interaction.commandName === 'callsign') {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name === 'department') {
+          return interaction.respond(filterChoices(await getDepartmentChoices(), focused.value));
+        }
+        if (focused.name === 'unit_type') {
+          const department = interaction.options.getString('department');
+          if (!department) return interaction.respond([]);
+          return interaction.respond(filterChoices(await getUnitChoices(department), focused.value));
+        }
+        return interaction.respond([]);
+      }
+
+      if (!interaction.isChatInputCommand()) return;
+
       if (interaction.commandName === 'callsign') {
         const sub = interaction.options.getSubcommand();
 
         if (sub === 'mine') {
           const rows = await getUserCallsigns(interaction.user.id);
-          if (!rows.length) {
-            return interaction.reply({ content: 'You do not have any allocated callsigns yet.', ephemeral: true });
+          if (!rows.length) return interaction.reply({ content: 'You do not have any allocated callsigns yet.', ephemeral: true });
+          const lines = [];
+          for (const r of rows) {
+            lines.push(`**${r.callsign}** — ${await friendlyDepartment(r.department)} / ${await friendlyUnit(r.department, r.unit_type)}`);
           }
-
-          const text = rows
-            .map((r) => `**${r.callsign}** — ${friendlyDepartment(r.department)} / ${friendlyUnit(r.department, r.unit_type)}`)
-            .join('\n');
-
-          return interaction.reply({ content: text, ephemeral: true });
+          return interaction.reply({ content: lines.join('\n'), ephemeral: true });
         }
 
-        const chosen = getAllocationFromSubcommand(interaction);
-        if (!chosen) {
-          return interaction.reply({ content: 'Unknown callsign option.', ephemeral: true });
+        if (sub === 'generate') {
+          const department = interaction.options.getString('department', true);
+          const unitType = interaction.options.getString('unit_type', true);
+          const { allocation, created } = await allocateCallsign({
+            discordUserId: interaction.user.id,
+            discordUsername: interaction.user.tag,
+            department,
+            unitType,
+          });
+
+          const embed = new EmbedBuilder()
+            .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
+            .setColor(0x1f6feb)
+            .addFields(
+              { name: 'Department', value: await friendlyDepartment(allocation.department), inline: false },
+              { name: 'Unit Type', value: await friendlyUnit(allocation.department, allocation.unit_type), inline: true },
+              { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
+            )
+            .setFooter({ text: 'Five911 Callsign System' })
+            .setTimestamp();
+          return interaction.reply({ embeds: [embed], ephemeral: true });
         }
-
-        const { allocation, created } = await allocateCallsign({
-          discordUserId: interaction.user.id,
-          discordUsername: interaction.user.tag,
-          department: chosen.department,
-          unitType: chosen.unitType,
-        });
-
-        const embed = new EmbedBuilder()
-          .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
-          .setColor(0x1f6feb)
-          .addFields(
-            { name: 'Department', value: friendlyDepartment(allocation.department), inline: false },
-            { name: 'Unit Type', value: friendlyUnit(allocation.department, allocation.unit_type), inline: true },
-            { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
-          )
-          .setFooter({ text: 'Five911 Callsign System' })
-          .setTimestamp();
-
-        return interaction.reply({ embeds: [embed], ephemeral: true });
       }
 
       if (interaction.commandName === 'callsign-admin') {
-        if (!hasAdminAccess(interaction)) {
-          return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
-        }
-
+        if (!hasAdminAccess(interaction)) return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
         const sub = interaction.options.getSubcommand();
         if (sub === 'release') {
           const id = interaction.options.getInteger('id', true);
@@ -107,6 +99,7 @@ function createBot() {
       const safeDetail = process.env.SHOW_DISCORD_ERRORS === 'true' ? `\n\`${err.message}\`` : '';
       const message = `Something went wrong while handling that callsign request.${safeDetail}`;
       if (interaction.deferred || interaction.replied) return interaction.followUp({ content: message, ephemeral: true });
+      if (interaction.isAutocomplete()) return interaction.respond([]).catch(() => {});
       return interaction.reply({ content: message, ephemeral: true });
     }
   });
@@ -119,7 +112,6 @@ async function startBot() {
     console.warn('DISCORD_TOKEN not set. Bot not started.');
     return null;
   }
-
   const client = createBot();
   await client.login(process.env.DISCORD_TOKEN);
   return client;

@@ -6,49 +6,10 @@ const callsign = new SlashCommandBuilder()
   .setDescription('Five911 callsign tools')
   .addSubcommand((sub) =>
     sub
-      .setName('cpd')
-      .setDescription('Generate or retrieve your Chicago Police Department callsign')
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('isp')
-      .setDescription('Generate or retrieve your Illinois State Trooper callsign')
-      .addStringOption((opt) =>
-        opt
-          .setName('district')
-          .setDescription('Illinois State Police district')
-          .setRequired(true)
-          .addChoices(
-            { name: 'District 17', value: 'district17' },
-            { name: 'District 20', value: 'district20' }
-          )
-      )
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('sheriff')
-      .setDescription('Generate or retrieve your Chicago Sheriffs Department callsign')
-      .addStringOption((opt) =>
-        opt
-          .setName('unit')
-          .setDescription('Sheriff unit type')
-          .setRequired(true)
-          .addChoices(
-            { name: 'Standard Patrol', value: 'patrol' },
-            { name: 'Detectives', value: 'detectives' },
-            { name: 'Tactical Units', value: 'tactical' },
-            { name: 'K9 Units', value: 'k9' },
-            { name: 'AIR', value: 'air' },
-            { name: 'Sergeants', value: 'sergeant' },
-            { name: 'Lieutenant', value: 'lieutenant' },
-            { name: 'Higher Command', value: 'command' }
-          )
-      )
-  )
-  .addSubcommand((sub) =>
-    sub
-      .setName('gamewarden')
-      .setDescription('Generate or retrieve your Illinois Game Wardens callsign')
+      .setName('generate')
+      .setDescription('Generate or retrieve a callsign')
+      .addStringOption((opt) => opt.setName('department').setDescription('Department').setRequired(true).setAutocomplete(true))
+      .addStringOption((opt) => opt.setName('unit_type').setDescription('Unit type').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub) => sub.setName('mine').setDescription('View your allocated Five911 callsigns'));
 
@@ -68,16 +29,9 @@ async function main() {
   for (const key of required) {
     if (!process.env[key]) throw new Error(`${key} is missing`);
   }
-
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-  await rest.put(
-    Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID),
-    { body: [callsign.toJSON(), admin.toJSON()] }
-  );
+  await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: [callsign.toJSON(), admin.toJSON()] });
   console.log('Slash commands registered.');
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+main().catch((err) => { console.error(err); process.exit(1); });
