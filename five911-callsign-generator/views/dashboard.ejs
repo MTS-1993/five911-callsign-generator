@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Five911 Callsign Generator</title>
+  <link rel="stylesheet" href="/public/style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Five911</p>
+        <h1>Callsign Generator</h1>
+        <p class="muted">Discord-allocated callsigns stored against each player.</p>
+      </div>
+      <div class="actions">
+        <a class="button" href="/api/callsigns<%= dashboardKey ? '?key=' + dashboardKey : '' %>">API</a>
+      </div>
+    </section>
+
+    <section class="cards">
+      <% Object.entries(stats).forEach(([dept, count]) => { %>
+        <article class="card">
+          <span><%= dept %></span>
+          <strong><%= count %></strong>
+        </article>
+      <% }) %>
+      <% if (!Object.keys(stats).length) { %>
+        <article class="card"><span>No callsigns allocated yet</span><strong>0</strong></article>
+      <% } %>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Allocated Callsigns</h2>
+        <input id="search" placeholder="Search callsign, user or department..." />
+      </div>
+      <div class="table-wrap">
+        <table id="callsignTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Callsign</th>
+              <th>Player</th>
+              <th>Department</th>
+              <th>Unit Type</th>
+              <th>Allocated</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% rows.forEach((row) => { %>
+              <tr>
+                <td><%= row.id %></td>
+                <td><strong><%= row.callsign %></strong></td>
+                <td><%= row.discord_username || row.discord_user_id %></td>
+                <td><%= friendlyDepartment(row.department) %></td>
+                <td><%= friendlyUnit(row.department, row.unit_type) %></td>
+                <td><%= new Date(row.created_at).toLocaleString('en-GB') %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <script>
+    const search = document.getElementById('search');
+    const rows = [...document.querySelectorAll('#callsignTable tbody tr')];
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase();
+      rows.forEach(row => row.style.display = row.innerText.toLowerCase().includes(q) ? '' : 'none');
+    });
+  </script>
+</body>
+</html>
