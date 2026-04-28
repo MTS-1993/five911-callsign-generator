@@ -6,6 +6,8 @@ Render-ready Node.js app with:
 - PostgreSQL callsign storage
 - Admin web dashboard login
 - Add, edit and delete callsigns from the dashboard
+- Add, edit and delete departments and unit types/subdivisions
+- Role-based restrictions for both departments and subdivisions
 
 ## Render settings
 
@@ -57,25 +59,32 @@ From the dashboard you can:
 - Add manual callsigns
 - Edit player/callsign details
 - Delete callsigns
+- Add/edit/delete departments
+- Add/edit/delete unit types/subdivisions
+- Set Discord role locks on departments and subdivisions
 
 ## Discord commands
 
 ```txt
-/callsign cpd
-/callsign isp
-/callsign sheriff
-/callsign gamewarden
+/callsign generate
 /callsign mine
 /callsign-admin release
 ```
 
-## Role-based department restrictions
+Department and unit type/subdivision options use Discord autocomplete from the live dashboard data.
 
-Departments can now be restricted by Discord role ID.
+## Role-based restrictions
 
-In the admin dashboard, edit a department and fill **Required Discord Role IDs** with one role ID per line or comma-separated. Leave it blank to allow everyone.
+Departments and unit types/subdivisions can be restricted by Discord role ID.
 
-Players without one of the required roles will be blocked from generating a callsign for that department. Server Administrators bypass this restriction.
+In the admin dashboard, edit a department or unit type and fill **Required Discord Role IDs** with one role ID per line or comma-separated. Leave it blank to allow everyone.
+
+Players must pass both checks:
+
+1. Department role restriction, if one is set.
+2. Unit type/subdivision role restriction, if one is set.
+
+Server Administrators bypass both restrictions.
 
 After uploading this version, deploy with:
 

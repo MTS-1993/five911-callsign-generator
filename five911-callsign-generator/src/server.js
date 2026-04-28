@@ -151,14 +151,14 @@ app.post('/admin/departments/:code/delete', requireAdmin, async (req, res) => {
 
 app.post('/admin/unit-types', requireAdmin, async (req, res) => {
   try {
-    await addUnitType({ departmentCode: req.body.department_code, code: req.body.code, label: req.body.label, prefix: req.body.prefix, digits: req.body.digits, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order });
+    await addUnitType({ departmentCode: req.body.department_code, code: req.body.code, label: req.body.label, prefix: req.body.prefix, digits: req.body.digits, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order, requiredRoleIds: req.body.required_role_ids });
     res.redirect('/?success=Unit type added.');
   } catch (err) { console.error(err); res.redirect(`/?error=${encodeURIComponent(err.message)}`); }
 });
 
 app.post('/admin/unit-types/:id/edit', requireAdmin, async (req, res) => {
   try {
-    const updated = await updateUnitType(req.params.id, { departmentCode: req.body.department_code, code: req.body.code, label: req.body.label, prefix: req.body.prefix, digits: req.body.digits, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order });
+    const updated = await updateUnitType(req.params.id, { departmentCode: req.body.department_code, code: req.body.code, label: req.body.label, prefix: req.body.prefix, digits: req.body.digits, enabled: isChecked(req.body.enabled), sortOrder: req.body.sort_order, requiredRoleIds: req.body.required_role_ids });
     if (!updated) throw new Error('Unit type not found.');
     res.redirect('/?success=Unit type updated.');
   } catch (err) { console.error(err); res.redirect(`/?error=${encodeURIComponent(err.message)}`); }

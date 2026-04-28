@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS callsign_unit_types (
   digits INTEGER NOT NULL DEFAULT 3 CHECK (digits BETWEEN 1 AND 8),
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  required_role_ids TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (department_code, code)
 );
@@ -45,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_callsign_allocations_dept_unit ON callsign_alloca
 CREATE INDEX IF NOT EXISTS idx_callsign_unit_types_department ON callsign_unit_types(department_code);
 
 ALTER TABLE callsign_departments ADD COLUMN IF NOT EXISTS required_role_ids TEXT NOT NULL DEFAULT '';
+ALTER TABLE callsign_unit_types ADD COLUMN IF NOT EXISTS required_role_ids TEXT NOT NULL DEFAULT '';
 
 
 INSERT INTO callsign_departments (code, label, sort_order) VALUES

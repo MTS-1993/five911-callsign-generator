@@ -41,6 +41,7 @@ async function getConfig({ includeDisabled = false, force = false } = {}) {
       digits: Number(unit.digits || 3),
       enabled: unit.enabled,
       sort_order: unit.sort_order,
+      required_role_ids: unit.required_role_ids || '',
     };
   }
 
@@ -73,6 +74,15 @@ async function getDepartmentRequirement(department) {
   const dept = config[department];
   if (!dept) throw new Error('Unknown or disabled department.');
   return parseRequiredRoleIds(dept.required_role_ids);
+}
+
+async function getUnitRequirement(department, unitType) {
+  const config = await getConfig();
+  const dept = config[department];
+  if (!dept) throw new Error('Unknown or disabled department.');
+  const unit = dept.unitTypes[unitType];
+  if (!unit) throw new Error('Unknown or disabled unit type for that department.');
+  return parseRequiredRoleIds(unit.required_role_ids);
 }
 
 async function getUnitChoices(department) {
@@ -213,22 +223,22 @@ async function listUnitTypes({ includeDisabled = true } = {}) {
   return result.rows;
 }
 
-async function addUnitType({ departmentCode, code, label, prefix = '', digits = 3, enabled = true, sortOrder = 0 }) {
+async function addUnitType({ departmentCode, code, label, prefix = '', digits = 3, enabled = true, sortOrder = 0, requiredRoleIds = '' }) {
   const dept = normaliseCode(departmentCode);
   const cleanCode = normaliseUnitCode(code);
   if (!dept || !cleanCode || !label) throw new Error('Department, unit type code and label are required.');
   const result = await pool.query(
-    `INSERT INTO callsign_unit_types (department_code, code, label, prefix, digits, enabled, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [dept, cleanCode, String(label).trim(), String(prefix || '').trim().toUpperCase(), Number(digits || 3), Boolean(enabled), Number(sortOrder || 0)]
+    `INSERT INTO callsign_unit_types (department_code, code, label, prefix, digits, enabled, sort_order, required_role_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [dept, cleanCode, String(label).trim(), String(prefix || '').trim().toUpperCase(), Number(digits || 3), Boolean(enabled), Number(sortOrder || 0), String(requiredRoleIds || '').trim()]
   );
   invalidateConfig();
   return result.rows[0];
 }
 
-async function updateUnitType(id, { departmentCode, code, label, prefix = '', digits = 3, enabled = false, sortOrder = 0 }) {
+async function updateUnitType(id, { departmentCode, code, label, prefix = '', digits = 3, enabled = false, sortOrder = 0, requiredRoleIds = '' }) {
   const result = await pool.query(
-    `UPDATE callsign_unit_types SET department_code = $1, code = $2, label = $3, prefix = $4, digits = $5, enabled = $6, sort_order = $7 WHERE id = $8 RETURNING *`,
-    [normaliseCode(departmentCode), normaliseUnitCode(code), String(label || '').trim(), String(prefix || '').trim().toUpperCase(), Number(digits || 3), Boolean(enabled), Number(sortOrder || 0), id]
+    `UPDATE callsign_unit_types SET department_code = $1, code = $2, label = $3, prefix = $4, digits = $5, enabled = $6, sort_order = $7, required_role_ids = $8 WHERE id = $9 RETURNING *`,
+    [normaliseCode(departmentCode), normaliseUnitCode(code), String(label || '').trim(), String(prefix || '').trim().toUpperCase(), Number(digits || 3), Boolean(enabled), Number(sortOrder || 0), String(requiredRoleIds || '').trim(), id]
   );
   invalidateConfig();
   return result.rows[0];
@@ -264,6 +274,7 @@ module.exports = {
   getDepartmentChoices,
   getUnitChoices,
   getDepartmentRequirement,
+  getUnitRequirement,
   parseRequiredRoleIds,
   allocateCallsign,
   getUserCallsigns,

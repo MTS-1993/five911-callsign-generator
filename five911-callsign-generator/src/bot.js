@@ -8,6 +8,7 @@ const {
   getDepartmentChoices,
   getUnitChoices,
   getDepartmentRequirement,
+  getUnitRequirement,
 } = require('./callsigns');
 
 function hasAdminAccess(interaction) {
@@ -72,9 +73,13 @@ function createBot() {
         if (sub === 'generate') {
           const department = interaction.options.getString('department', true);
           const unitType = interaction.options.getString('unit_type', true);
-          const requiredRoles = await getDepartmentRequirement(department);
-          if (!memberHasAnyRole(interaction, requiredRoles)) {
+          const requiredDepartmentRoles = await getDepartmentRequirement(department);
+          if (!memberHasAnyRole(interaction, requiredDepartmentRoles)) {
             return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this department.', ephemeral: true });
+          }
+          const requiredUnitRoles = await getUnitRequirement(department, unitType);
+          if (!memberHasAnyRole(interaction, requiredUnitRoles)) {
+            return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this subdivision/unit type.', ephemeral: true });
           }
           const { allocation, created } = await allocateCallsign({
             discordUserId: interaction.user.id,
