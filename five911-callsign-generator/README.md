@@ -91,3 +91,30 @@ After uploading this version, deploy with:
 ```bash
 npm install && npm run migrate && npm run register-commands
 ```
+
+## Discord nickname restore behaviour
+
+The FiveM duty bridge now stores a member's original Discord server nickname the first time they go on duty.
+
+- On duty: applies the configured format, for example `[{callsign}] {name}`.
+- Off duty / disconnect: restores the exact original server nickname.
+- If the member did not have a server nickname before going on duty, it clears the nickname so Discord shows their normal username/display name again.
+- Existing custom nicknames are not lost; they are saved in the `discord_nickname_states` table.
+
+Run the migration after deploying this update:
+
+```bash
+npm run migrate
+```
+
+Recommended Render environment value:
+
+```env
+NICKNAME_FORMAT=[{callsign}] {name}
+```
+
+For callsign only:
+
+```env
+NICKNAME_FORMAT=[{callsign}]
+```

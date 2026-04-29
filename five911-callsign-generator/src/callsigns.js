@@ -157,6 +157,57 @@ async function listAllCallsigns() {
   return result.rows;
 }
 
+async function getCallsignForDepartment(discordUserId, department) {
+  const result = await pool.query(
+    `SELECT * FROM callsign_allocations WHERE discord_user_id = $1 AND department = $2 ORDER BY created_at DESC LIMIT 1`,
+    [String(discordUserId).trim(), department]
+  );
+  return result.rows[0] || null;
+}
+
+function normaliseLookupValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+async function getCallsignForJob(discordUserId, jobName) {
+  const cleanDiscordId = String(discordUserId || '').trim();
+  const lookup = normaliseLookupValue(jobName);
+  if (!cleanDiscordId || !lookup) return null;
+
+  const result = await pool.query(
+    `SELECT
+       a.*,
+       d.label AS department_label,
+       u.label AS unit_type_label,
+       CASE
+         WHEN LOWER(u.code) = LOWER($2) THEN 100
+         WHEN LOWER(d.code) = LOWER($2) THEN 90
+         WHEN LOWER(REGEXP_REPLACE(u.label, '[^A-Za-z0-9]+', '', 'g')) = LOWER($2) THEN 80
+         WHEN LOWER(REGEXP_REPLACE(d.label, '[^A-Za-z0-9]+', '', 'g')) = LOWER($2) THEN 70
+         WHEN LOWER(u.code) LIKE LOWER('%' || $2 || '%') THEN 60
+         WHEN LOWER(d.code) LIKE LOWER('%' || $2 || '%') THEN 50
+         WHEN LOWER(REGEXP_REPLACE(u.label, '[^A-Za-z0-9]+', '', 'g')) LIKE LOWER('%' || $2 || '%') THEN 40
+         WHEN LOWER(REGEXP_REPLACE(d.label, '[^A-Za-z0-9]+', '', 'g')) LIKE LOWER('%' || $2 || '%') THEN 30
+         ELSE 0
+       END AS match_score
+     FROM callsign_allocations a
+     LEFT JOIN callsign_departments d ON d.code = a.department
+     LEFT JOIN callsign_unit_types u ON u.department_code = a.department AND u.code = a.unit_type
+     WHERE a.discord_user_id = $1
+     ORDER BY match_score DESC, a.created_at DESC
+     LIMIT 1`,
+    [cleanDiscordId, lookup]
+  );
+
+  const allocation = result.rows[0] || null;
+  if (!allocation || Number(allocation.match_score || 0) <= 0) return null;
+  return allocation;
+}
+
 async function addAllocation({ discordUserId, discordUsername, department, unitType, callsign }) {
   await validateDepartmentUnit(department, unitType);
   const cleanCallsign = String(callsign || '').trim().toUpperCase();
@@ -279,6 +330,8 @@ module.exports = {
   allocateCallsign,
   getUserCallsigns,
   listAllCallsigns,
+  getCallsignForDepartment,
+  getCallsignForJob,
   addAllocation,
   updateAllocation,
   deleteAllocation,

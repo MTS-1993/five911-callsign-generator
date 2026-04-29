@@ -70,3 +70,19 @@ INSERT INTO callsign_unit_types (department_code, code, label, prefix, digits, s
   ('CSD', 'command', 'Higher Command', 'K', 3, 80),
   ('IGW', 'warden', 'Game Warden', 'WARDEN', 3, 10)
 ON CONFLICT (department_code, code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS discord_nickname_states (
+  guild_id TEXT NOT NULL,
+  discord_user_id TEXT NOT NULL,
+  original_nickname TEXT,
+  original_display_name TEXT,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  current_callsign TEXT,
+  current_nickname TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (guild_id, discord_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_discord_nickname_states_active
+ON discord_nickname_states(guild_id, active);

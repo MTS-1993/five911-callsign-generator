@@ -9,6 +9,8 @@ const { startBot } = require('./bot');
 const {
   getConfig,
   listAllCallsigns,
+  getCallsignForDepartment,
+  getCallsignForJob,
   addAllocation,
   updateAllocation,
   deleteAllocation,
@@ -50,6 +52,142 @@ function requireAdmin(req, res, next) { if (req.session?.isAdmin) return next();
 function isConfigured() { return Boolean(adminPass()); }
 function isChecked(value) { return value === 'on' || value === 'true' || value === true; }
 
+let discordClient = null;
+
+function apiKeyOk(req) {
+  const expected = process.env.FIVEM_API_KEY;
+  if (!expected) return false;
+  return req.get('x-api-key') === expected || req.query.api_key === expected;
+}
+
+function departmentForJob(jobName) {
+  // Uses the departments/subdivisions already configured in /generatecallsign.
+  // No manual JOB_DEPARTMENT_MAP is required.
+  return String(jobName || '').trim();
+}
+
+function stripExistingFive911Prefix(name) {
+  return String(name || '').replace(/^\s*\[[A-Za-z0-9-]+\]\s*/g, '').trim();
+}
+
+function nicknameFormat() {
+  return process.env.NICKNAME_FORMAT || '[{callsign}] {name}';
+}
+
+function makeNickname({ callsign, baseName }) {
+  const base = stripExistingFive911Prefix(baseName || 'Five911 Member') || 'Five911 Member';
+  const nick = nicknameFormat()
+    .replaceAll('{callsign}', callsign)
+    .replaceAll('{name}', base)
+    .trim();
+  return nick.length > 32 ? nick.slice(0, 32) : nick;
+}
+
+async function ensureNicknameState({ guildId, member }) {
+  const existing = await pool.query(
+    `SELECT * FROM discord_nickname_states WHERE guild_id = $1 AND discord_user_id = $2`,
+    [guildId, member.id]
+  );
+
+  if (existing.rows[0]) return existing.rows[0];
+
+  const displayName = member.nickname || member.user.globalName || member.user.username;
+  const inserted = await pool.query(
+    `INSERT INTO discord_nickname_states
+      (guild_id, discord_user_id, original_nickname, original_display_name, active)
+     VALUES ($1, $2, $3, $4, TRUE)
+     RETURNING *`,
+    [guildId, member.id, member.nickname || null, displayName]
+  );
+  return inserted.rows[0];
+}
+
+async function markNicknameStateActive({ guildId, discordUserId, callsign, nickname }) {
+  await pool.query(
+    `UPDATE discord_nickname_states
+     SET active = TRUE, current_callsign = $3, current_nickname = $4, updated_at = CURRENT_TIMESTAMP
+     WHERE guild_id = $1 AND discord_user_id = $2`,
+    [guildId, discordUserId, callsign, nickname]
+  );
+}
+
+async function getNicknameState({ guildId, discordUserId }) {
+  const result = await pool.query(
+    `SELECT * FROM discord_nickname_states WHERE guild_id = $1 AND discord_user_id = $2`,
+    [guildId, discordUserId]
+  );
+  return result.rows[0] || null;
+}
+
+async function clearNicknameState({ guildId, discordUserId }) {
+  await pool.query(
+    `UPDATE discord_nickname_states
+     SET active = FALSE, current_callsign = NULL, current_nickname = NULL, updated_at = CURRENT_TIMESTAMP
+     WHERE guild_id = $1 AND discord_user_id = $2`,
+    [guildId, discordUserId]
+  );
+}
+
+async function updateDiscordNickname({ discordUserId, jobName, onDuty }) {
+  if (!discordClient) throw new Error('Discord bot is not ready yet.');
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) throw new Error('DISCORD_GUILD_ID is not configured.');
+  const guild = await discordClient.guilds.fetch(guildId);
+  const member = await guild.members.fetch(discordUserId);
+
+  if (!onDuty) {
+    const state = await getNicknameState({ guildId, discordUserId });
+
+    if (state && state.active) {
+      const restoreTo = state.original_nickname || null;
+      if ((member.nickname || null) !== restoreTo) {
+        await member.setNickname(restoreTo, 'Five911 QB-Core duty ended - restoring original nickname');
+      }
+      await clearNicknameState({ guildId, discordUserId });
+      return {
+        changed: true,
+        nickname: restoreTo || member.user.globalName || member.user.username,
+        restored: true,
+        reason: 'off_duty_restored'
+      };
+    }
+
+    // Safety fallback for older installs before nickname state existed.
+    const clean = stripExistingFive911Prefix(member.nickname || member.user.globalName || member.user.username);
+    if (member.nickname && clean && member.nickname !== clean) {
+      await member.setNickname(clean, 'Five911 QB-Core duty ended - fallback cleanup');
+      return { changed: true, nickname: clean, restored: false, reason: 'off_duty_fallback_cleanup' };
+    }
+    return { changed: false, restored: false, reason: 'off_duty_no_active_state' };
+  }
+
+  const jobLookup = departmentForJob(jobName);
+  if (!jobLookup) return { changed: false, reason: 'unknown_job' };
+
+  const allocation = await getCallsignForJob(discordUserId, jobLookup);
+  if (!allocation) {
+    return {
+      changed: false,
+      reason: 'no_callsign_for_job_department_or_subdivision',
+      jobName: jobLookup
+    };
+  }
+  const department = allocation.department;
+
+  const state = await ensureNicknameState({ guildId, member });
+  const baseName = state.original_nickname || state.original_display_name || member.user.globalName || member.user.username;
+  const nickname = makeNickname({ callsign: allocation.callsign, baseName });
+
+  if (member.nickname !== nickname) {
+    await member.setNickname(nickname, 'Five911 QB-Core duty as ' + jobName);
+    await markNicknameStateActive({ guildId, discordUserId, callsign: allocation.callsign, nickname });
+    return { changed: true, nickname, department, callsign: allocation.callsign, restored: false };
+  }
+
+  await markNicknameStateActive({ guildId, discordUserId, callsign: allocation.callsign, nickname });
+  return { changed: false, reason: 'already_set', nickname, department, callsign: allocation.callsign, restored: false };
+}
+
 function buildStats(rows, config) {
   return rows.reduce((acc, row) => {
     const dept = friendlyDepartmentFromConfig(config, row.department);
@@ -80,6 +218,21 @@ app.post('/logout', requireAdmin, (req, res) => req.session.destroy(() => res.re
 app.get('/health', async (req, res) => {
   try { await pool.query('SELECT 1'); res.json({ ok: true, db: true }); }
   catch (err) { res.status(500).json({ ok: false, db: false, error: err.message }); }
+});
+
+app.post('/api/fivem/duty', async (req, res) => {
+  try {
+    if (!apiKeyOk(req)) return res.status(401).json({ ok: false, error: 'Invalid or missing API key.' });
+    const discordUserId = String(req.body.discordUserId || req.body.discord_user_id || '').replace(/\D/g, '');
+    const jobName = String(req.body.jobName || req.body.job_name || '').trim();
+    const onDuty = req.body.onDuty === true || req.body.on_duty === true || req.body.onDuty === 'true' || req.body.on_duty === 'true' || req.body.onDuty === 1 || req.body.on_duty === 1;
+    if (!discordUserId) return res.status(400).json({ ok: false, error: 'discordUserId is required.' });
+    const result = await updateDiscordNickname({ discordUserId, jobName, onDuty });
+    return res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('FiveM duty nickname sync failed:', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 app.get('/', requireAdmin, async (req, res) => {
@@ -178,5 +331,5 @@ app.get('/api/unit-types', requireAdmin, async (req, res) => res.json(await list
 
 app.listen(PORT, async () => {
   console.log(`Five911 Callsign Generator running on port ${PORT}`);
-  startBot().catch((err) => console.error('Bot failed to start:', err));
+  startBot().then((client) => { discordClient = client; }).catch((err) => console.error('Bot failed to start:', err));
 });

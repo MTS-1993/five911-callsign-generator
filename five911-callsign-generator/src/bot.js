@@ -34,7 +34,7 @@ function filterChoices(choices, focused) {
 }
 
 function createBot() {
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
   client.once(Events.ClientReady, () => {
     console.log(`Discord bot logged in as ${client.user.tag}`);
