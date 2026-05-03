@@ -81,9 +81,15 @@ function createBot() {
           if (!memberHasAnyRole(interaction, requiredUnitRoles)) {
             return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this subdivision/unit type.', ephemeral: true });
           }
+          const currentName =
+            interaction.member?.nickname ||
+            interaction.member?.user?.globalName ||
+            interaction.user.globalName ||
+            interaction.user.username;
+
           const { allocation, created } = await allocateCallsign({
             discordUserId: interaction.user.id,
-            discordUsername: interaction.user.tag,
+            discordUsername: currentName,
             department,
             unitType,
           });

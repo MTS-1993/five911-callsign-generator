@@ -89,15 +89,36 @@ async function ensureNicknameState({ guildId, member }) {
     [guildId, member.id]
   );
 
-  if (existing.rows[0]) return existing.rows[0];
+  const currentDisplayName = member.nickname || member.user.globalName || member.user.username;
 
-  const displayName = member.nickname || member.user.globalName || member.user.username;
+  if (existing.rows[0]) {
+    const state = existing.rows[0];
+
+    // If the player is not currently on duty, refresh the stored original name before
+    // applying a callsign. This prevents an old Discord name being restored later.
+    if (!state.active) {
+      const updated = await pool.query(
+        `UPDATE discord_nickname_states
+         SET original_nickname = $3,
+             original_display_name = $4,
+             active = TRUE,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE guild_id = $1 AND discord_user_id = $2
+         RETURNING *`,
+        [guildId, member.id, member.nickname || null, currentDisplayName]
+      );
+      return updated.rows[0];
+    }
+
+    return state;
+  }
+
   const inserted = await pool.query(
     `INSERT INTO discord_nickname_states
       (guild_id, discord_user_id, original_nickname, original_display_name, active)
      VALUES ($1, $2, $3, $4, TRUE)
      RETURNING *`,
-    [guildId, member.id, member.nickname || null, displayName]
+    [guildId, member.id, member.nickname || null, currentDisplayName]
   );
   return inserted.rows[0];
 }
