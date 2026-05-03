@@ -83,21 +83,47 @@ function makeNickname({ callsign, baseName }) {
   return nick.length > 32 ? nick.slice(0, 32) : nick;
 }
 
+function safeDiscordName(value) {
+  const clean = String(value || '').trim();
+  return clean.length > 0 ? clean : null;
+}
+
 async function ensureNicknameState({ guildId, member }) {
   const existing = await pool.query(
     `SELECT * FROM discord_nickname_states WHERE guild_id = $1 AND discord_user_id = $2`,
     [guildId, member.id]
   );
 
-  if (existing.rows[0]) return existing.rows[0];
+  // If the member is already marked as on duty, keep the original snapshot.
+  // This prevents duplicate duty events from overwriting their real pre-duty name
+  // with the temporary callsign nickname.
+  if (existing.rows[0] && existing.rows[0].active) return existing.rows[0];
 
-  const displayName = member.nickname || member.user.globalName || member.user.username;
+  const originalNickname = safeDiscordName(member.nickname);
+  const displayName = safeDiscordName(member.nickname) || safeDiscordName(member.user.globalName) || safeDiscordName(member.user.username) || 'Five911 Member';
+
+  if (existing.rows[0]) {
+    const updated = await pool.query(
+      `UPDATE discord_nickname_states
+       SET original_nickname = $3,
+           original_display_name = $4,
+           active = TRUE,
+           current_callsign = NULL,
+           current_nickname = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE guild_id = $1 AND discord_user_id = $2
+       RETURNING *`,
+      [guildId, member.id, originalNickname, displayName]
+    );
+    return updated.rows[0];
+  }
+
   const inserted = await pool.query(
     `INSERT INTO discord_nickname_states
       (guild_id, discord_user_id, original_nickname, original_display_name, active)
      VALUES ($1, $2, $3, $4, TRUE)
      RETURNING *`,
-    [guildId, member.id, member.nickname || null, displayName]
+    [guildId, member.id, originalNickname, displayName]
   );
   return inserted.rows[0];
 }
@@ -139,14 +165,21 @@ async function updateDiscordNickname({ discordUserId, jobName, onDuty }) {
     const state = await getNicknameState({ guildId, discordUserId });
 
     if (state && state.active) {
-      const restoreTo = state.original_nickname || null;
-      if ((member.nickname || null) !== restoreTo) {
+      const restoreTo = safeDiscordName(state.original_nickname)
+        || safeDiscordName(state.original_display_name)
+        || safeDiscordName(member.user.globalName)
+        || safeDiscordName(member.user.username);
+
+      // Never send a blank/null nickname to Discord. That is what caused names
+      // to be cleared completely on off-duty.
+      if (restoreTo && member.nickname !== restoreTo) {
         await member.setNickname(restoreTo, 'Five911 QB-Core duty ended - restoring original nickname');
       }
+
       await clearNicknameState({ guildId, discordUserId });
       return {
         changed: true,
-        nickname: restoreTo || member.user.globalName || member.user.username,
+        nickname: restoreTo || member.displayName || member.user.username,
         restored: true,
         reason: 'off_duty_restored'
       };
