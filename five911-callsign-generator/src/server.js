@@ -89,36 +89,15 @@ async function ensureNicknameState({ guildId, member }) {
     [guildId, member.id]
   );
 
-  const currentDisplayName = member.nickname || member.user.globalName || member.user.username;
+  if (existing.rows[0]) return existing.rows[0];
 
-  if (existing.rows[0]) {
-    const state = existing.rows[0];
-
-    // If the player is not currently on duty, refresh the stored original name before
-    // applying a callsign. This prevents an old Discord name being restored later.
-    if (!state.active) {
-      const updated = await pool.query(
-        `UPDATE discord_nickname_states
-         SET original_nickname = $3,
-             original_display_name = $4,
-             active = TRUE,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE guild_id = $1 AND discord_user_id = $2
-         RETURNING *`,
-        [guildId, member.id, member.nickname || null, currentDisplayName]
-      );
-      return updated.rows[0];
-    }
-
-    return state;
-  }
-
+  const displayName = member.nickname || member.user.globalName || member.user.username;
   const inserted = await pool.query(
     `INSERT INTO discord_nickname_states
       (guild_id, discord_user_id, original_nickname, original_display_name, active)
      VALUES ($1, $2, $3, $4, TRUE)
      RETURNING *`,
-    [guildId, member.id, member.nickname || null, currentDisplayName]
+    [guildId, member.id, member.nickname || null, displayName]
   );
   return inserted.rows[0];
 }
@@ -173,12 +152,10 @@ async function updateDiscordNickname({ discordUserId, jobName, onDuty }) {
       };
     }
 
-    // Safety fallback for older installs before nickname state existed.
-    const clean = stripExistingFive911Prefix(member.nickname || member.user.globalName || member.user.username);
-    if (member.nickname && clean && member.nickname !== clean) {
-      await member.setNickname(clean, 'Five911 QB-Core duty ended - fallback cleanup');
-      return { changed: true, nickname: clean, restored: false, reason: 'off_duty_fallback_cleanup' };
-    }
+    // Important: do not perform any fallback nickname cleanup here.
+    // Some QB-Core servers fire multiple off-duty/drop events. The first event restores
+    // the original nickname and marks the state inactive. A later duplicate event must
+    // not strip rank tags or other text from that restored nickname.
     return { changed: false, restored: false, reason: 'off_duty_no_active_state' };
   }
 

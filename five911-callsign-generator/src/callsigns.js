@@ -130,17 +130,7 @@ async function allocateCallsign({ discordUserId, discordUsername, department, un
     `SELECT * FROM callsign_allocations WHERE discord_user_id = $1 AND department = $2 AND unit_type = $3`,
     [discordUserId, department, unitType]
   );
-  if (existing.rows[0]) {
-    // Keep the stored Discord username/display name fresh whenever the player uses the bot.
-    const updated = await pool.query(
-      `UPDATE callsign_allocations
-       SET discord_username = $1
-       WHERE id = $2
-       RETURNING *`,
-      [String(discordUsername || existing.rows[0].discord_username || '').trim(), existing.rows[0].id]
-    );
-    return { allocation: updated.rows[0], created: false };
-  }
+  if (existing.rows[0]) return { allocation: existing.rows[0], created: false };
 
   for (let i = 0; i < 5; i++) {
     const callsign = await generateUniqueCallsign(department, unitType);
