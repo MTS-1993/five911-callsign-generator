@@ -10,20 +10,27 @@ const {
   getDepartmentRequirement,
   getUnitRequirement,
 } = require('./callsigns');
+const { handleJobsAutocomplete, handleSetJob } = require('./jobs');
 
 function hasAdminAccess(interaction) {
   if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
   const roleId = process.env.ADMIN_ROLE_ID;
   if (!roleId) return false;
-  return interaction.member?.roles?.cache?.has(roleId);
+  return memberHasRole(interaction, roleId);
+}
+
+function memberHasRole(interaction, roleId) {
+  const roles = interaction.member?.roles;
+  if (!roles) return false;
+  if (roles.cache?.has(roleId)) return true;
+  if (Array.isArray(roles)) return roles.includes(roleId);
+  return false;
 }
 
 function memberHasAnyRole(interaction, requiredRoleIds) {
   if (!requiredRoleIds || !requiredRoleIds.length) return true;
   if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
-  const roles = interaction.member?.roles?.cache;
-  if (!roles) return false;
-  return requiredRoleIds.some((roleId) => roles.has(roleId));
+  return requiredRoleIds.some((roleId) => memberHasRole(interaction, roleId));
 }
 
 function filterChoices(choices, focused) {
@@ -31,6 +38,37 @@ function filterChoices(choices, focused) {
   return choices
     .filter((choice) => choice.name.toLowerCase().includes(q) || choice.value.toLowerCase().includes(q))
     .slice(0, 25);
+}
+
+async function handleGenerateCallsign(interaction) {
+  const department = interaction.options.getString('department', true);
+  const unitType = interaction.options.getString('unit_type', true);
+  const requiredDepartmentRoles = await getDepartmentRequirement(department);
+  if (!memberHasAnyRole(interaction, requiredDepartmentRoles)) {
+    return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this department.', ephemeral: true });
+  }
+  const requiredUnitRoles = await getUnitRequirement(department, unitType);
+  if (!memberHasAnyRole(interaction, requiredUnitRoles)) {
+    return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this subdivision/unit type.', ephemeral: true });
+  }
+  const { allocation, created } = await allocateCallsign({
+    discordUserId: interaction.user.id,
+    discordUsername: interaction.user.tag,
+    department,
+    unitType,
+  });
+
+  const embed = new EmbedBuilder()
+    .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
+    .setColor(0x1f6feb)
+    .addFields(
+      { name: 'Department', value: await friendlyDepartment(allocation.department), inline: false },
+      { name: 'Unit Type', value: await friendlyUnit(allocation.department, allocation.unit_type), inline: true },
+      { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
+    )
+    .setFooter({ text: 'Five911 Callsign System' })
+    .setTimestamp();
+  return interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
 function createBot() {
@@ -42,7 +80,7 @@ function createBot() {
 
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
-      if (interaction.isAutocomplete() && interaction.commandName === 'callsign') {
+      if (interaction.isAutocomplete() && ['callsign', 'generatecallsign'].includes(interaction.commandName)) {
         const focused = interaction.options.getFocused(true);
         if (focused.name === 'department') {
           return interaction.respond(filterChoices(await getDepartmentChoices(), focused.value));
@@ -55,7 +93,19 @@ function createBot() {
         return interaction.respond([]);
       }
 
+      if (interaction.isAutocomplete() && interaction.commandName === 'setjob') {
+        return handleJobsAutocomplete(interaction);
+      }
+
       if (!interaction.isChatInputCommand()) return;
+
+      if (interaction.commandName === 'setjob') {
+        return handleSetJob(client, interaction);
+      }
+
+      if (interaction.commandName === 'generatecallsign') {
+        return handleGenerateCallsign(interaction);
+      }
 
       if (interaction.commandName === 'callsign') {
         const sub = interaction.options.getSubcommand();
@@ -71,34 +121,7 @@ function createBot() {
         }
 
         if (sub === 'generate') {
-          const department = interaction.options.getString('department', true);
-          const unitType = interaction.options.getString('unit_type', true);
-          const requiredDepartmentRoles = await getDepartmentRequirement(department);
-          if (!memberHasAnyRole(interaction, requiredDepartmentRoles)) {
-            return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this department.', ephemeral: true });
-          }
-          const requiredUnitRoles = await getUnitRequirement(department, unitType);
-          if (!memberHasAnyRole(interaction, requiredUnitRoles)) {
-            return interaction.reply({ content: 'You do not have the required Discord role to generate a callsign for this subdivision/unit type.', ephemeral: true });
-          }
-          const { allocation, created } = await allocateCallsign({
-            discordUserId: interaction.user.id,
-            discordUsername: interaction.user.tag,
-            department,
-            unitType,
-          });
-
-          const embed = new EmbedBuilder()
-            .setTitle(created ? 'Five911 Callsign Allocated' : 'Existing Five911 Callsign')
-            .setColor(0x1f6feb)
-            .addFields(
-              { name: 'Department', value: await friendlyDepartment(allocation.department), inline: false },
-              { name: 'Unit Type', value: await friendlyUnit(allocation.department, allocation.unit_type), inline: true },
-              { name: 'Callsign', value: `**${allocation.callsign}**`, inline: true }
-            )
-            .setFooter({ text: 'Five911 Callsign System' })
-            .setTimestamp();
-          return interaction.reply({ embeds: [embed], ephemeral: true });
+          return handleGenerateCallsign(interaction);
         }
       }
 

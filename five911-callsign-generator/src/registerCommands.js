@@ -1,5 +1,6 @@
 require('dotenv').config();
 const { REST, Routes, SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { jobsCommand } = require('./jobs');
 
 const callsign = new SlashCommandBuilder()
   .setName('callsign')
@@ -12,6 +13,12 @@ const callsign = new SlashCommandBuilder()
       .addStringOption((opt) => opt.setName('unit_type').setDescription('Unit type').setRequired(true).setAutocomplete(true))
   )
   .addSubcommand((sub) => sub.setName('mine').setDescription('View your allocated Five911 callsigns'));
+
+const generateCallsign = new SlashCommandBuilder()
+  .setName('generatecallsign')
+  .setDescription('Generate or retrieve a Five911 callsign')
+  .addStringOption((opt) => opt.setName('department').setDescription('Department').setRequired(true).setAutocomplete(true))
+  .addStringOption((opt) => opt.setName('unit_type').setDescription('Unit type').setRequired(true).setAutocomplete(true));
 
 const admin = new SlashCommandBuilder()
   .setName('callsign-admin')
@@ -30,7 +37,7 @@ async function main() {
     if (!process.env[key]) throw new Error(`${key} is missing`);
   }
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-  await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: [callsign.toJSON(), admin.toJSON()] });
+  await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, process.env.DISCORD_GUILD_ID), { body: [callsign.toJSON(), generateCallsign.toJSON(), admin.toJSON(), jobsCommand.toJSON()] });
   console.log('Slash commands registered.');
 }
 

@@ -46,6 +46,10 @@ Optional:
 ```txt
 ADMIN_ROLE_ID=discord_role_allowed_to_use_discord_admin_command
 SHOW_DISCORD_ERRORS=false
+FIVEM_BRIDGE_URL=https://your_fivem_bridge_url
+FIVEM_BRIDGE_TOKEN=your_fivem_bridge_token
+ALLOWED_ROLE_IDS=discord_role_id_allowed_to_use_setjob,another_role_id
+JOB_LOG_CHANNEL_ID=discord_channel_for_setjob_logs
 ```
 
 ## Admin dashboard
@@ -67,11 +71,16 @@ From the dashboard you can:
 
 ```txt
 /callsign generate
+/generatecallsign
 /callsign mine
 /callsign-admin release
+/setjob
 ```
 
 Department and unit type/subdivision options use Discord autocomplete from the live dashboard data.
+`/generatecallsign` is kept as a backwards-compatible shortcut for `/callsign generate`.
+
+`/setjob` is included so this app can be the single Discord bot for both callsigns and jobs. Do not run the separate Five911 Jobs Discord bot with the same `DISCORD_TOKEN` at the same time, or Discord will disconnect one of the bot sessions.
 
 ## Role-based restrictions
 
